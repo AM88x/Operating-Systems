@@ -24,21 +24,22 @@ void on_child_exit(int signo) {
     waitpid(child_pid, &status, 0);
 }
 
-// Struct to store environment variables
+//struct to store environment variables
 typedef struct {
     char *name;
     char *value;
 } EnvVariable;
 
-EnvVariable environment[MAX_ARGS]; // Assume a maximum of MAX_ARGS environment variables
+EnvVariable environment[MAX_ARGS]; //assume a maximum of MAX_ARGS environment variables
 
-// Function to setup environment
+//function to setup environment
 void setup_environment() {
-    // Change the Current_Working_Directory to the desired initial directory
+    //change the Current_Working_Directory to the desired initial directory
     chdir(Current_Working_Directory);
 }
 
 int find_env_variable(char *name) {
+    //find the index of the environment variable with the given name
     for (int i = 0; environment[i].name != NULL; i++) {
         if (strcmp(environment[i].name, name) == 0) {
             return i;
@@ -59,11 +60,12 @@ void parse_input(char *input, char *command, char *args[], int *bg) {
     while (token != NULL) {
         if (i == 0) {
             strcpy(command, token); //typically first word is command
+            // args[i] = strdup(token); //store command in args array
         } else if (i == 1 && strcmp(token, "&") == 0) { //if second word is & then it is a background process
             *bg = 1; // 1 for background
         } else {
             args[i - 1] = strdup(token); //args are stored in args array 
-            printf("\nargs[%d]: %s\n", i - 1, args[i - 1]); //debug   
+            // printf("\nargs[%d]: %s\n", i - 1, args[i - 1]); //debug   
             }
         token = strtok(NULL, " "); //continue to next word
         i++;
@@ -73,12 +75,28 @@ void parse_input(char *input, char *command, char *args[], int *bg) {
 
 void evaluate_expression(char *input, char *command, char *args[], int *bg) {
     parse_input(input, command, args, bg);
+
     for (int i = 0; args[i] != NULL; i++) {
         if (args[i][0] == '$') {
             int var_index = find_env_variable(args[i] + 1);
-            if (var_index != -1 && environment[var_index].value != NULL) {
+            if (var_index == -1) {
+                fprintf(stderr, "Variable not found: %s\n", args[i] + 1);
+                continue;
+            }
+            if (environment[var_index].value != NULL) {
                 free(args[i]); // Free the old argument
-                args[i] = strdup(environment[var_index].value);
+                char *value = strdup(environment[var_index].value);
+                char *token = strtok(value, " ");
+                int j = i;
+                while (token != NULL) {
+                    args[j++] = strdup(token);
+                    token = strtok(NULL, " ");
+                }
+                args[j] = NULL;
+                printf("Expanded args[%d-%d]: ", i, j - 1);
+                for (int k = i; k < j; k++) {
+                    printf("%s \n", args[k]);
+                }
             }
         }
     }
@@ -117,20 +135,24 @@ void execute_shell_builtin(char *command, char *args[]) {
                 int var_index = find_env_variable(env_var);
                 if (var_index == -1) {
                     // Variable doesn't exist, add it to the environment
-                    for (var_index = 0; environment[var_index].name != NULL; var_index++)
-                        ;
+                    for (var_index = 0; environment[var_index].name != NULL; var_index++);
                     environment[var_index].name = strdup(env_var);
                 }
 
-                // Combine all tokens following '=' into the value
-                while (args[i] != NULL) {
-                    strcat(value, args[i]);
+                // Concatenate the entirety of value before checking for double quotes
+                while (args[i + 1] != NULL) {
                     strcat(value, " ");
-                    i++;
+                    strcat(value, args[++i]);
+                    if (args[i][strlen(args[i]) - 1] == '\"') {
+                        break;
+                    }
                 }
 
-                // Remove trailing space, if any
-                value[strlen(value) - 1] = '\0';
+                // If the value starts and ends with a double quote, remove them
+                if (value[0] == '\"' && value[strlen(value) - 1] == '\"') {
+                    value++;
+                    value[strlen(value) - 1] = '\0';
+                }
 
                 // Store the value
                 environment[var_index].value = strdup(value);
@@ -144,11 +166,12 @@ void execute_shell_builtin(char *command, char *args[]) {
 }
 
 
+
 void execute_command(char *command, char *args[], int bg) {
     printf("command: %s\n", command);
     child_pid = fork();
     if (child_pid == 0) { // Child process
-        if (strcmp(command, "mkdirs") == 0) {
+        if (strcmp(command, "mkdir") == 0) {
             // If the command is mkdir, use execlp to pass arguments separately
             execlp(command, command, args[0], (char *)NULL);
             perror("Error");
@@ -187,7 +210,9 @@ void shell() {
         if (strcmp(input, "exit") == 0) {
             break;
         }
-
+        else if (strcmp(input, "") == 0) {
+            continue;
+        }else{
         evaluate_expression(input, command, args, &bg);
 
         if (command[0] != '\0') {
@@ -195,9 +220,9 @@ void shell() {
                 execute_shell_builtin(command, args);
             } else {
                 execute_command(command, args, bg);
+                }
             }
         }
-
     } while (1);
 }
 
