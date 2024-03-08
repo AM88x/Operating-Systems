@@ -12,7 +12,7 @@ char* parse_input();
 void shell();
 int evaluate_command(char* command);
 void execute_shell_builtin(char* command);
-void execute_command(char* command);
+void execute_command(char* command, char** args, int bg);
 char* read_input(void);
 char command[100];
 int main() {
@@ -57,16 +57,16 @@ void execute_shell_builtin(char* command){
 }
 
 //function to execute command
-void execute_command(char* command){
+void execute_command(char* command, char** args, int bg){
     //forking the process
     int pid = fork();
     if (pid == 0){
         //child process
-        execvp(command, NULL);
+        execvp(*command, args);
     }
     else{
         //parent process
-        wait(NULL);
+        waitpid(pid);
     }
 }
 //shell function
